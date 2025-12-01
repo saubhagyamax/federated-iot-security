@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Federated IoT Security Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 min-h-screen text-white">
+    <div id="root" class="p-6">
+        <div class="max-w-7xl mx-auto">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-8">
+                <div class="flex items-center gap-4">
+                    <div class="bg-blue-600 p-3 rounded-xl">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-bold">Federated IoT Security</h1>
+                        <p class="text-blue-300 text-sm">Privacy-Preserving Threat Detection Platform</p>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="switchView('overview')" id="btn-overview" class="px-4 py-2 rounded-lg font-medium transition bg-blue-600">
+                        Overview
+                    </button>
+                    <button onclick="switchView('devices')" id="btn-devices" class="px-4 py-2 rounded-lg font-medium transition bg-slate-800 hover:bg-slate-700">
+                        Devices
+                    </button>
+                    <button onclick="switchView('threats')" id="btn-threats" class="px-4 py-2 rounded-lg font-medium transition bg-slate-800 hover:bg-slate-700">
+                        Threats
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading" class="text-center py-16">
+                <svg class="w-12 h-12 mx-auto animate-spin mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <p class="text-xl">Loading Dashboard...</p>
+            </div>
+
+            <!-- Key Metrics -->
+            <div id="metrics" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 hidden"></div>
+
+            <!-- Main Content -->
+            <div id="content" class="hidden"></div>
+
+            <!-- Footer -->
+            <div class="mt-8 text-center text-slate-400 text-sm">
+                <p class="flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    End-to-end encrypted • Privacy-preserving federated learning
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+        let currentView = 'overview';
+        let statsData = null;
+        let devicesData = [];
+        let threatsData = [];
+
+        async function fetchData() {
+            try {
+                const [statsRes, devicesRes, threatsRes] = await Promise.all([
+                    fetch(`${API_BASE_URL}/api/v1/stats`),
+                    fetch(`${API_BASE_URL}/api/v1/devices`),
+                    fetch(`${API_BASE_URL}/api/v1/threats?limit=20`)
+                ]);
+
+                statsData = await statsRes.json();
+                const devicesResult = await devicesRes.json();
+                const threatsResult = await threatsRes.json();
+                
+                devicesData = devicesResult.devices || [];
+                threatsData = threatsResult.threats || [];
+
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('metrics').classList.remove('hidden');
+                document.getElementById('content').classList.remove('hidden');
+
+                renderMetrics();
+                renderContent();
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('loading').innerHTML = `
+                    <div class="text-red-400">
+                        <p class="text-xl mb-2">⚠️ Connection Error</p>
+                        <p class="text-sm">Make sure the API server is running at ${API_BASE_URL}</p>
+                        <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700">
+                            Retry
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        function renderMetrics() {
+            const metrics = document.getElementById('metrics');
+            metrics.innerHTML = `
+                ${createMetricCard('Total Devices', statsData?.devices?.total || 0, `${statsData?.devices?.active || 0} active`, 'blue')}
+                ${createMetricCard('Threats Detected', statsData?.threats?.total || 0, `${statsData?.threats?.high_severity || 0} high severity`, 'red')}
+                ${createMetricCard('Model Version', `v${statsData?.model?.current_version || 1}`, `${(statsData?.model?.accuracy * 100 || 65).toFixed(1)}% accuracy`, 'purple')}
+                ${createMetricCard('Pending Updates', statsData?.model?.pending_updates || 0, `Round ${statsData?.model?.current_round || 0}`, 'green')}
+            `;
+        }
+
+        function createMetricCard(label, value, subtitle, color) {
+            const colors = {
+                blue: 'from-blue-600 to-blue-700',
+                red: 'from-red-600 to-red-700',
+                purple: 'from-purple-600 to-purple-700',
+                green: 'from-green-600 to-green-700'
+            };
+
+            return `
+                <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-xl p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-slate-400 text-sm font-medium">${label}</span>
+                    </div>
+                    <div class="text-3xl font-bold mb-1">${value}</div>
+                    <div class="text-slate-400 text-sm">${subtitle}</div>
+                </div>
+            `;
+        }
+
+        function renderContent() {
+            const content = document.getElementById('content');
+            
+            if (currentView === 'overview') {
+                content.innerHTML = renderOverview();
+            } else if (currentView === 'devices') {
+                content.innerHTML = renderDevices();
+            } else if (currentView === 'threats') {
+                content.innerHTML = renderThreats();
+            }
+        }
+
+        function renderOverview() {
+            const recentThreats = threatsData.slice(0, 5);
+            const activeDevices = devicesData.filter(d => d.status === 'active').slice(0, 6);
+
+            return `
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Device Status -->
+                    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-xl p-6">
+                        <h2 class="text-xl font-bold mb-4">Device Status Distribution</h2>
+                        <div class="space-y-4">
+                            ${createStatusBar('Active', statsData?.devices?.active || 0, statsData?.devices?.total || 1, 'green')}
+                            ${createStatusBar('Compromised', statsData?.devices?.compromised || 0, statsData?.devices?.total || 1, 'red')}
+                            ${createStatusBar('Inactive', statsData?.devices?.inactive || 0, statsData?.devices?.total || 1, 'gray')}
+                        </div>
+                    </div>
+
+                    <!-- FL Status -->
+                    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-xl p-6">
+                        <h2 class="text-xl font-bold mb-4">Federated Learning Status</h2>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <span class="text-slate-400">Global Model</span>
+                                <span class="text-xl font-bold">v${statsData?.model?.current_version || 1}</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-slate-400">Model Accuracy</span>
+                                <span class="text-xl font-bold text-green-400">${(statsData?.model?.accuracy * 100 || 65).toFixed(1)}%</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-slate-400">Current Round</span>
+                                <span class="text-xl font-bold">${statsData?.model?.current_round || 0}</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-slate-400">Pending Updates</span>
+                                <span class="text-xl font-bold text-blue-400">${statsData?.model?.pending_updates || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Devices -->
+                    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-xl p-6">
+                        <h2 class="text-xl font-bold mb-4">Active Devices</h2>
+                        <div class="space-y-3">
+                            ${activeDevices.map(device => `
+                                <div class="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
+                                    <div>
+                                        <div class="font-medium">${device.name}</div>
+                                        <div class="text-xs text-slate-400">${device.device_type}</div>
+                                    </div>
+                                    <span class="text-xs text-green-400">Online</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Recent Threats -->
+                    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-xl p-6">
+                        <h2 class="text-xl font-bold mb-4">Recent Threats</h2>
+                        <div class="space-y-3">
+                            ${recentThreats.length === 0 ? `
+                                <div class="text-center py-8 text-slate-400">
+                                    <p>No threats detected</p>
+                                </div>
+                            ` : recentThreats.map(threat => `
+                                <div class="p-3 rounded-lg border ${threat.severity === 'high' || threat.severity === 'critical' ? 'bg-red-900/20 border-red-700' : 'bg-yellow-900/20 border-yellow-700'}">
+                                    <div class="flex items-start justify-between mb-2">
+                                        <span class="font-medium text-sm">${threat.threat_type}</span>
+                                        <span class="text-xs text-slate-400">${threat.timestamp}</span>
+                                    </div>
+                                    <div class="text-xs text-slate-300">${threat.device_name}</div>
+                                    <div class="text-xs text-slate-400 mt-1">Confidence: ${threat.confidence}%</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function createStatusBar(label, value, total, color) {
+            const percentage = total > 0 ? (value / total) * 100 : 0;
+            const colors = {
+                green: 'bg-green-500',
+                red: 'bg-red-500',
+                gray: 'bg-slate-500'
+            };
+
+            return `
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-slate-400 text-sm">${label}</span>
+                        <span class="text-sm font-medium">${value} / ${total}</span>
+                    </div>
+                    <div class="w-full bg-slate-700 rounded-full h-2">
+                        <div class="${colors[color]} h-2 rounded-full transition-all duration-500" style="width: ${percentage}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderDevices() {
+            return `
+                <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-xl p-6">
+                    <h2 class="text-xl font-bold mb-6">All Devices (${devicesData.length})</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                        ${devicesData.map(device => `
+                            <div class="border rounded-lg p-4 ${device.status === 'active' ? 'border-green-700 bg-green-900/20' : device.status === 'compromised' ? 'border-red-700 bg-red-900/20' : 'border-slate-700 bg-slate-800/50'}">
+                                <div class="font-semibold text-lg mb-1">${device.name}</div>
+                                <div class="text-xs text-slate-400 mb-3">${device.device_id}</div>
+                                <div class="space-y-2 text-sm">
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-400">Type</span>
+                                        <span class="capitalize">${device.device_type}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-400">Status</span>
+                                        <span class="capitalize">${device.status}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-400">Model Version</span>
+                                        <span>v${device.current_model_version || 1}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-400">Contributions</span>
+                                        <span>${device.total_contributions || 0}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderThreats() {
+            return `
+                <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-xl p-6">
+                    <h2 class="text-xl font-bold mb-6">Threat Log (${threatsData.length})</h2>
+                    ${threatsData.length === 0 ? `
+                        <div class="text-center py-16">
+                            <p class="text-xl text-slate-400">No threats detected</p>
+                            <p class="text-sm text-slate-500 mt-2">All systems operating normally</p>
+                        </div>
+                    ` : `
+                        <div class="space-y-4">
+                            ${threatsData.map(threat => `
+                                <div class="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+                                    <div class="flex items-start justify-between mb-3">
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-3 mb-2">
+                                                <span class="font-semibold text-lg">${threat.threat_type}</span>
+                                                <span class="px-2 py-1 rounded text-xs font-medium ${
+                                                    threat.severity === 'critical' ? 'bg-red-600' :
+                                                    threat.severity === 'high' ? 'bg-orange-600' :
+                                                    threat.severity === 'medium' ? 'bg-yellow-600' : 'bg-blue-600'
+                                                }">${threat.severity?.toUpperCase()}</span>
+                                            </div>
+                                            <p class="text-sm text-slate-400 mb-2">${threat.description}</p>
+                                        </div>
+                                        <span class="text-xs text-slate-500 ml-4">${threat.timestamp}</span>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <span class="text-slate-400">Device: </span>
+                                            <span class="font-medium">${threat.device_name}</span>
+                                        </div>
+                                        <div>
+                                            <span class="text-slate-400">Confidence: </span>
+                                            <span class="font-medium text-blue-400">${threat.confidence}%</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `}
+                </div>
+            `;
+        }
+
+        function switchView(view) {
+            currentView = view;
+            
+            // Update button styles
+            document.querySelectorAll('[id^="btn-"]').forEach(btn => {
+                btn.className = 'px-4 py-2 rounded-lg font-medium transition bg-slate-800 hover:bg-slate-700';
+            });
+            document.getElementById(`btn-${view}`).className = 'px-4 py-2 rounded-lg font-medium transition bg-blue-600';
+            
+            renderContent();
+        }
+
+        // Initial load
+        fetchData();
+        
+        // Refresh every 5 seconds
+        setInterval(fetchData, 5000);
+    </script>
+</body>
+</html>
